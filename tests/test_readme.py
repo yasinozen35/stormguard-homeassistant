@@ -17,6 +17,7 @@ import pytest
 from pytest_homeassistant_custom_component.common import (
     async_fire_time_changed,
     async_mock_service,
+    setup_test_component_platform,
 )
 import yaml
 
@@ -151,3 +152,70 @@ async def test_blueprint_after_integration_same_id(
     # message the README tells users to look for.
     assert entry.state is ConfigEntryState.LOADED
     assert "Handler is already defined!" in caplog.text
+
+
+async def test_integration_climate_example(
+    hass: HomeAssistant,
+    hass_client_no_auth: Any,
+    internal_url: str,
+    freezer: FrozenDateTimeFactory,
+) -> None:
+    """Example B (climate): only running ACs off; restore previous settings."""
+    from homeassistant.components.climate import HVACMode  # noqa: PLC0415
+
+    from .test_climate_guard import FakeAC  # noqa: PLC0415
+
+    freezer.move_to("2026-10-17 10:00:00+00:00")
+    acs = {
+        "climate.salon": FakeAC("salon", HVACMode.COOL, 22.5, "quiet", swing="both"),
+        "climate.yatak_odasi": FakeAC("yatak_odasi", HVACMode.DRY, 25.0, "low"),
+        "climate.cocuk_odasi": FakeAC("cocuk_odasi", HVACMode.OFF, 21.0, "auto"),
+    }
+    setup_test_component_platform(hass, "climate", list(acs.values()))
+    assert await async_setup_component(hass, "climate", {"climate": {"platform": "test"}})
+    assert await async_setup_component(hass, "scene", {})
+    assert await async_setup_component(
+        hass, "input_text", {"input_text": {"stormguard_klima": {"max": 255}}}
+    )
+    await setup_entry(hass, make_entry(timeout=60))
+    assert await async_setup_component(
+        hass, "automation", {"automation": [example("integration-climate")]}
+    )
+    await hass.async_block_till_done()
+    client = await hass_client_no_auth()
+    before = {e: ac.settings() for e, ac in acs.items()}
+
+    await client.post(URL, json=event("raised"))
+    await hass.async_block_till_done()
+    assert acs["climate.salon"].settings()[0] == "off"
+    assert acs["climate.yatak_odasi"].settings()[0] == "off"
+    assert acs["climate.cocuk_odasi"].calls == []
+    assert hass.states.get("input_text.stormguard_klima").state == (
+        "climate.salon=cool,climate.yatak_odasi=dry"
+    )
+
+    await client.post(URL, json=event("cleared"))
+    await hass.async_block_till_done()
+    for entity_id, ac in acs.items():
+        assert ac.settings() == before[entity_id]
+        assert ("turn_on", None) not in ac.calls
+    assert hass.states.get("input_text.stormguard_klima").state == ""
+
+    # Missed cleared + snapshot lost (as after a restart): the timeout still
+    # restores, using the remembered mode; a user-started AC is left alone.
+    await client.post(URL, json=event("raised"))
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        "scene", "delete", {"entity_id": "scene.stormguard_salon"}, blocking=True
+    )
+    await hass.services.async_call(
+        "climate",
+        "set_hvac_mode",
+        {"entity_id": "climate.yatak_odasi", "hvac_mode": "heat"},
+        blocking=True,
+    )
+    freezer.tick(timedelta(minutes=61))
+    async_fire_time_changed(hass)
+    await hass.async_block_till_done()
+    assert acs["climate.salon"].settings()[0] == "cool"
+    assert acs["climate.yatak_odasi"].settings()[0] == "heat"

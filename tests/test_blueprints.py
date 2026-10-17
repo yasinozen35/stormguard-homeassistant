@@ -30,7 +30,12 @@ from pytest_homeassistant_custom_component.common import (
 )
 
 BLUEPRINT_DIR = Path(__file__).parents[1] / "blueprints" / "automation" / "stormguard"
-BLUEPRINTS = ["shield_actions.yaml", "switch_guard.yaml", "cover_guard.yaml"]
+BLUEPRINTS = [
+    "shield_actions.yaml",
+    "switch_guard.yaml",
+    "cover_guard.yaml",
+    "climate_guard.yaml",
+]
 WEBHOOK_ID = "stormguard_TestWebhookId_123"
 SOURCE_URL = "https://github.com/yasinozen35/stormguard-homeassistant/blob/main/blueprints/automation/stormguard/"
 
@@ -180,14 +185,14 @@ class Harness:
         await settle()
 
 
-async def settle() -> None:
+async def settle(rounds: int = 100) -> None:
     """Let pending script steps run.
 
     `hass.async_block_till_done()` cannot be used here: a blueprint session
     is a long-running automation run (it waits for `cleared`), and
     block_till_done would wait for it to finish.
     """
-    for _ in range(100):
+    for _ in range(rounds):
         await asyncio.sleep(0)
 
 

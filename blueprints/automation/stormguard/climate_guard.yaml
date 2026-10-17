@@ -1,0 +1,429 @@
+blueprint:
+  name: "StormGuard — Klimaları kapat (Climate guard)"
+  author: StormGuard
+  description: >-
+    Yıldırım riskinde **açık olan** klimaları kapatır; risk bitince **ya da**
+    güvenlik süresi dolunca (hangisi önce olursa) onları **önceki ayarlarıyla**
+    (mod, sıcaklık, fan, salınım…) yeniden açar. Zaten kapalı olan bir klimaya
+    hiç dokunmaz; siz bu sırada birini açtıysanız onu ezmez.
+
+
+    - Ayarlar kapatmadan hemen önce her klima için bir sahne anlık görüntüsüyle
+    (`scene.create`) saklanır ve geri yüklemede o sahne kullanılır. Bare
+    `climate.turn_on` **kullanılmaz**: açma özelliği olmayan bir klimada Home
+    Assistant ilk bulduğu modu (önce ısıtma) seçebilir — yazın ısıtma.
+
+    - **Hafıza (isteğe bağlı ama önerilir):** bir `input_text` yardımcısı
+    seçerseniz hangi klimaları hangi ayarla kapattığı oraya da yazılır. Home
+    Assistant yeniden başlarsa (sahneler kalıcı değildir) klimalar buradan geri
+    açılır. **Hafıza yoksa yeniden başlatmada hiçbir şey yapılmaz** — hangi
+    klimayı kendisinin kapattığını bilemez ve kapalı tuttuğunuz bir klimayı
+    açmak yanlış olur.
+
+    - `test` olayları, başka kalkanlar ve en düşük şiddetin altındaki uyarılar
+    hiçbir şeyi değiştirmez. Aynı webhook kimliğini diğer StormGuard
+    şablonlarıyla paylaşabilir. `scene` entegrasyonu gerekir (`default_config`
+    içinde vardır).
+
+
+    *English:* turns the air conditioners that are **on** off during a lightning
+    risk and turns them back on with their **previous settings** on `cleared`
+    or after a safety timeout, whichever comes first. ACs that were already off
+    are never touched; one you turned on meanwhile is not overridden. Settings
+    are kept in a scene snapshot (bare `climate.turn_on` is never used — on
+    entities without a turn-on feature Home Assistant may pick heat). Optional
+    `input_text` memory lets it restore after a Home Assistant restart; without
+    it, a restart does nothing.
+  domain: automation
+  source_url: https://github.com/yasinozen35/stormguard-homeassistant/blob/main/blueprints/automation/stormguard/climate_guard.yaml
+  homeassistant:
+    min_version: "2025.4.0"
+  input:
+    connection:
+      name: "Bağlantı (Connection)"
+      icon: mdi:webhook
+      input:
+        webhook_id:
+          name: "Webhook kimliği (Webhook ID)"
+          description: >-
+            StormGuard uygulamasına yazdığınız kimliğin aynısı. Diğer
+            StormGuard şablonlarıyla aynı kimliği kullanabilirsiniz. Sır
+            niteliğindedir. *The same ID you entered in the app.*
+          selector:
+            text: {}
+        local_only:
+          name: "Yalnızca ev ağından kabul et (Local network only)"
+          description: >-
+            Telefon evin dışından yayın yapacaksa kapatın. Aynı kimliği
+            kullanan bütün şablonlarda aynı değeri seçin. *Turn off to accept
+            events from outside your home network.*
+          default: true
+          selector:
+            boolean: {}
+    shield:
+      name: "Kalkan (Shield)"
+      icon: mdi:shield-half-full
+      input:
+        profile:
+          name: "Kalkan (Shield)"
+          description: "Hangi StormGuard kalkanına tepki verilsin? *Which shield to react to.*"
+          default: electronics
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - label: "Ev elektroniği / Modem (electronics) — yıldırım"
+                  value: electronics
+                - label: "Araç (car) — dolu"
+                  value: car
+                - label: "Bitkiler (plants) — don"
+                  value: plants
+                - label: "Çamaşır (clothes) — yağmur"
+                  value: clothes
+        min_severity:
+          name: "En düşük şiddet (Minimum severity)"
+          description: "*Warning = warning + critical; Critical = critical only.*"
+          default: warning
+          selector:
+            select:
+              options:
+                - label: "Uyarı ve üstü (warning)"
+                  value: warning
+                - label: "Yalnızca kritik (critical)"
+                  value: critical
+        alert_types:
+          name: "Uyarı tipleri (Alert types)"
+          description: "Boş = bütün tipler. *Empty = all types.*"
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: "Yağmur (rain)"
+                  value: rain
+                - label: "Gök gürültülü fırtına / yıldırım (thunderstorm)"
+                  value: thunderstorm
+                - label: "Rüzgâr (wind)"
+                  value: wind
+                - label: "Dolu (hail)"
+                  value: hail
+                - label: "Don (frost)"
+                  value: frost
+    device:
+      name: "Klimalar (Air conditioners)"
+      icon: mdi:air-conditioner
+      input:
+        climates:
+          name: "Klimalar (Climate entities)"
+          description: >-
+            Daikin Onecta, Midea vb. `climate` varlıkları. Yalnızca o an açık
+            olanlar kapatılır. *Only the ones that are on are turned off.*
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: climate
+        memory:
+          name: "Hafıza (Memory) — isteğe bağlı / optional"
+          description: >-
+            Bir **Metin** (`input_text`) yardımcısı: Ayarlar → Cihazlar ve
+            Hizmetler → Yardımcılar → Metin; **en fazla uzunluk 255**, desen
+            boş. Şablon kapattığı klimaları ve ayarlarını buraya kısaca yazar,
+            geri açınca siler. Home Assistant yeniden başlarsa klimalar
+            buradan geri açılır; **seçilmezse yeniden başlatmada hiçbir şey
+            yapılmaz**. Yer yetmezse önce fan, sonra sıcaklık bilgisi düşülür
+            (sınır asla aşılmaz). Bu yardımcıyı başka bir şey için
+            kullanmayın.
+            *English: an `input_text` helper (max length 255, no pattern).
+            The blueprint stores which ACs it turned off and their settings,
+            and clears it after restoring. It is what makes restore work after
+            a Home Assistant restart; without it a restart does nothing. When
+            space runs out, fan then temperature are dropped — the limit is
+            never exceeded.*
+          default: ""
+          selector:
+            entity:
+              filter:
+                - domain: input_text
+        safety_minutes:
+          name: "Güvenlik süresi (Safety timeout)"
+          description: >-
+            Bu kadar dakika içinde `cleared` gelmezse klimalar yine açılır
+            (yeni bir `raised` süreyi uzatır). **0 = kapalı: önerilmez** —
+            kaçırılan tek bir `cleared` klimaları süresiz kapalı bırakır.
+            *0 disables the timeout (not recommended).*
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 1440
+              step: 5
+              unit_of_measurement: min
+              mode: box
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: webhook
+    id: stormguard
+    webhook_id: !input webhook_id
+    allowed_methods:
+      - POST
+    local_only: !input local_only
+  - trigger: homeassistant
+    id: ha_start
+    event: start
+
+variables:
+  sg_profile: !input profile
+  sg_min_severity: !input min_severity
+  sg_types: !input alert_types
+  sg_safety_minutes: !input safety_minutes
+  sg_entities: !input climates
+  sg_memory: !input memory
+  sg_rank:
+    warning: 1
+    critical: 2
+  sg_match: >-
+    {% set j = trigger.json if trigger.id == 'stormguard' and trigger.json is defined and trigger.json is mapping else {} %}
+    {{ j.get('source') == 'stormguard'
+       and j.get('profile') == sg_profile
+       and j.get('state') in ['raised', 'cleared']
+       and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+       and (sg_types | length == 0 or j.get('type') in sg_types) }}
+  sg_state: "{{ trigger.json.get('state') if sg_match else none }}"
+  sg_key: "{{ trigger.json.get('type') ~ '|' ~ trigger.json.get('severity') if sg_match else '' }}"
+  # Hafıza: `d=<son tarih, unix sn; 0 = süre yok>;climate.x=mod/sıcaklık/fan;…`
+  sg_mem_max: "{{ ([state_attr(sg_memory, 'max') | int(100), 255] | min) if sg_memory else 0 }}"
+  sg_mem_raw: "{{ states(sg_memory) if sg_memory else '' }}"
+  sg_mem_deadline: >-
+    {% set head = sg_mem_raw.split(';')[0] %}
+    {{ head[2:] | int(-1) if head.startswith('d=') else -1 }}
+  # Yalnızca bu şablona seçilmiş klimalar okunur; elle yazılmış başka bir
+  # varlık asla açılmaz.
+  sg_mem_items: >-
+    {%- set ns = namespace(out=[]) -%}
+    {%- if sg_mem_deadline | int(-1) >= 0 -%}
+      {%- for part in sg_mem_raw.split(';')[1:] -%}
+        {%- set kv = part.split('=', 1) -%}
+        {%- if kv | length == 2 and kv[0] in ([sg_entities] | flatten) and kv[1] -%}
+          {%- set v = kv[1].split('/') -%}
+          {%- set ns.out = ns.out + [{
+                'e': kv[0],
+                'm': v[0],
+                't': (v[1] | float(none)) if v | length > 1 and v[1] else none,
+                'f': v[2] if v | length > 2 and v[2] else none}] -%}
+        {%- endif -%}
+      {%- endfor -%}
+    {%- endif -%}
+    {{ ns.out }}
+  sg_start_mode: >-
+    {% set now_ts = as_timestamp(now()) %}
+    {% set d = sg_mem_deadline | int(-1) %}
+    {% if trigger.id != 'ha_start' or not sg_memory or sg_mem_items | length == 0 %}none
+    {%- elif d == 0 or now_ts < d %}resume
+    {%- elif now_ts < d + 86400 %}restore
+    {%- else %}stale{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (trigger.id == 'stormguard' and sg_match and sg_state == 'raised')
+         or (trigger.id == 'ha_start' and sg_start_mode in ['resume', 'restore', 'stale']) }}
+
+actions:
+  - variables:
+      # Kapatılacaklar: açık (kapalı/erişilemez değil) ve `off` moduna sahip.
+      sg_items: >-
+        {%- if trigger.id == 'stormguard' -%}
+          {%- set ns = namespace(out=[]) -%}
+          {%- for e in [sg_entities] | flatten -%}
+            {%- set fan = state_attr(e, 'fan_mode') -%}
+            {%- set temp = state_attr(e, 'temperature') -%}
+            {%- if states(e) not in ['off', 'unavailable', 'unknown']
+                  and 'off' in (state_attr(e, 'hvac_modes') or []) -%}
+              {%- set ns.out = ns.out + [{
+                    'e': e,
+                    'm': states(e),
+                    't': temp if temp is number else none,
+                    'f': fan if fan is string and fan
+                         and '/' not in fan and ';' not in fan and '=' not in fan else none}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ ns.out }}
+        {%- elif sg_start_mode in ['resume', 'restore'] -%}
+          {{ sg_mem_items }}
+        {%- else -%}
+          {{ [] }}
+        {%- endif -%}
+      sg_active: >-
+        {% if sg_items | length == 0 %}{{ [] }}
+        {%- elif trigger.id == 'stormguard' %}{{ [sg_key] }}
+        {%- elif sg_start_mode == 'resume' %}{{ ['*'] }}
+        {%- else %}{{ [] }}{% endif %}
+      sg_deadline: >-
+        {% if trigger.id == 'stormguard' %}{{ (as_timestamp(now()) + sg_safety_minutes | int * 60) | int if sg_safety_minutes | int > 0 else 0 }}
+        {%- else %}{{ sg_mem_deadline | int(0) }}{% endif %}
+      sg_scene_prefix: "{{ ('stormguard_' ~ this.entity_id.split('.')[1]) | slugify }}"
+  - if:
+      - "{{ trigger.id == 'stormguard' and sg_items | length > 0 }}"
+    then:
+      - alias: "Önceki ayarların sahne anlık görüntüsü (klima başına)"
+        repeat:
+          for_each: "{{ sg_items }}"
+          sequence:
+            - action: scene.create
+              data:
+                scene_id: "{{ (sg_scene_prefix ~ '_' ~ repeat.item.e.split('.')[1]) | slugify }}"
+                snapshot_entities:
+                  - "{{ repeat.item.e }}"
+              continue_on_error: true
+      - if:
+          - "{{ sg_memory != '' and sg_memory is not none }}"
+        then:
+          - alias: "Hafızaya yaz (sınırı asla aşmadan)"
+            action: input_text.set_value
+            target:
+              entity_id: "{{ sg_memory }}"
+            data:
+              value: >-
+                {%- set mx = sg_mem_max | int(0) -%}
+                {%- set head = 'd=' ~ (sg_deadline | int(0)) -%}
+                {%- set ns = namespace(rec='', done=false) -%}
+                {%- for level in [3, 2] -%}
+                  {%- if not ns.done -%}
+                    {%- set acc = namespace(s=head) -%}
+                    {%- for i in sg_items -%}
+                      {%- set it = namespace(s=i.e ~ '=' ~ i.m) -%}
+                      {%- if i.t is not none -%}{%- set it.s = it.s ~ '/' ~ ('%g' | format(i.t)) -%}
+                      {%- elif level == 3 and i.f -%}{%- set it.s = it.s ~ '/' -%}{%- endif -%}
+                      {%- if level == 3 and i.f -%}{%- set it.s = it.s ~ '/' ~ i.f -%}{%- endif -%}
+                      {%- set acc.s = acc.s ~ ';' ~ it.s -%}
+                    {%- endfor -%}
+                    {%- if acc.s | length <= mx -%}{%- set ns.rec = acc.s -%}{%- set ns.done = true -%}{%- endif -%}
+                  {%- endif -%}
+                {%- endfor -%}
+                {%- if not ns.done -%}
+                  {%- set acc = namespace(s=head) -%}
+                  {%- for i in sg_items -%}
+                    {%- set cand = acc.s ~ ';' ~ i.e ~ '=' ~ i.m -%}
+                    {%- if cand | length <= mx -%}{%- set acc.s = cand -%}{%- endif -%}
+                  {%- endfor -%}
+                  {%- set ns.rec = acc.s if acc.s != head and acc.s | length <= mx else '' -%}
+                {%- endif -%}
+                {{ ns.rec }}
+            continue_on_error: true
+      - alias: "Açık klimaları kapat"
+        repeat:
+          for_each: "{{ sg_items | map(attribute='e') | list }}"
+          sequence:
+            # `set_hvac_mode: off`, `climate.turn_off` değil: turn_off
+            # TURN_OFF özelliği ister; özelliği olmayan bir klima açıkça
+            # hedeflenirse çağrı hata verir.
+            - action: climate.set_hvac_mode
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                hvac_mode: "off"
+              continue_on_error: true
+  - alias: "Bitene ya da güvenlik süresi dolana kadar dinle"
+    repeat:
+      while:
+        - >-
+          {{ sg_active | length > 0
+             and (sg_deadline | int == 0 or as_timestamp(now()) < sg_deadline | float) }}
+      sequence:
+        - wait_for_trigger:
+            - trigger: webhook
+              webhook_id: !input webhook_id
+              allowed_methods:
+                - POST
+              local_only: !input local_only
+          timeout: >-
+            {{ [sg_deadline | float - as_timestamp(now()), 0] | max | round(0, 'ceil') | int
+               if sg_deadline | int > 0 else 31536000 }}
+          continue_on_timeout: true
+        - variables:
+            sg_w_state: >-
+              {% set j = wait.trigger.json if wait.trigger and wait.trigger.json is defined and wait.trigger.json is mapping else {} %}
+              {% if not wait.trigger %}timeout
+              {%- elif j.get('source') == 'stormguard'
+                   and j.get('profile') == sg_profile
+                   and j.get('state') in ['raised', 'cleared']
+                   and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+                   and (sg_types | length == 0 or j.get('type') in sg_types) %}{{ j.get('state') }}
+              {%- else %}ignore{% endif %}
+            sg_w_key: >-
+              {{ wait.trigger.json.get('type') ~ '|' ~ wait.trigger.json.get('severity')
+                 if sg_w_state in ['raised', 'cleared'] else '' }}
+            sg_active: >-
+              {% if sg_w_state == 'timeout' %}{{ [] }}
+              {%- elif sg_w_state == 'raised' %}{{ (sg_active + [sg_w_key]) | unique | list }}
+              {%- elif sg_w_state == 'cleared' %}{{ sg_active | reject('in', [sg_w_key, '*']) | list }}
+              {%- else %}{{ sg_active }}{% endif %}
+            sg_deadline: >-
+              {{ (as_timestamp(now()) + sg_safety_minutes | int * 60) | int
+                 if sg_w_state == 'raised' and sg_safety_minutes | int > 0 else sg_deadline }}
+  - alias: "Geri aç — yalnızca hâlâ kapalı olanlar, önceki ayarlarla"
+    repeat:
+      for_each: "{{ sg_items }}"
+      sequence:
+        - variables:
+            sg_scene: "{{ 'scene.' ~ ((sg_scene_prefix ~ '_' ~ repeat.item.e.split('.')[1]) | slugify) }}"
+        - if:
+            - "{{ is_state(repeat.item.e, 'off') }}"
+          then:
+            - if:
+                - "{{ state_attr(sg_scene, 'entity_id') is not none }}"
+              then:
+                # Sahne: mod, sıcaklık, fan, salınım, ön ayar — tam olarak.
+                - action: scene.turn_on
+                  target:
+                    entity_id: "{{ sg_scene }}"
+                  continue_on_error: true
+              else:
+                # Sahne yok (HA yeniden başladı): hafızadaki kayıt.
+                - action: climate.set_hvac_mode
+                  target:
+                    entity_id: "{{ repeat.item.e }}"
+                  data:
+                    hvac_mode: "{{ repeat.item.m }}"
+                  continue_on_error: true
+                - if:
+                    - "{{ repeat.item.t is not none }}"
+                  then:
+                    - action: climate.set_temperature
+                      target:
+                        entity_id: "{{ repeat.item.e }}"
+                      data:
+                        temperature: "{{ repeat.item.t }}"
+                      continue_on_error: true
+                - if:
+                    - "{{ repeat.item.f is not none }}"
+                  then:
+                    - action: climate.set_fan_mode
+                      target:
+                        entity_id: "{{ repeat.item.e }}"
+                      data:
+                        fan_mode: "{{ repeat.item.f }}"
+                      continue_on_error: true
+        - if:
+            - "{{ state_attr(sg_scene, 'entity_id') is not none }}"
+          then:
+            - action: scene.delete
+              target:
+                entity_id: "{{ sg_scene }}"
+              continue_on_error: true
+  - if:
+      - >-
+        {{ sg_memory != '' and sg_memory is not none
+           and (sg_items | length > 0 or sg_start_mode == 'stale') }}
+    then:
+      - alias: "Hafızayı temizle"
+        action: input_text.set_value
+        target:
+          entity_id: "{{ sg_memory }}"
+        data:
+          value: ""
+        continue_on_error: true

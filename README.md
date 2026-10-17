@@ -78,6 +78,7 @@ yoktur ve gerekmez:
 |---|---|---|
 | [`switch_guard.yaml`](blueprints/automation/stormguard/switch_guard.yaml) — *Prizi kapat* | Seçilen prizleri kapatır, sonra **yalnızca kendi kapattıklarını** açar | Elektronik (yıldırım) |
 | [`cover_guard.yaml`](blueprints/automation/stormguard/cover_guard.yaml) — *Kapıyı/tenteyi kapat* | Garaj kapısı/tente/panjuru kapatır, isteğe bağlı yeniden açar | Araç (dolu) |
+| [`climate_guard.yaml`](blueprints/automation/stormguard/climate_guard.yaml) — *Klimaları kapat* | **Açık** klimaları kapatır, sonra **önceki ayarlarıyla** (mod, sıcaklık, fan) açar | Elektronik (yıldırım) |
 | [`shield_actions.yaml`](blueprints/automation/stormguard/shield_actions.yaml) — *Kalkan aksiyonları* | Risk başlayınca / bitince **sizin seçtiğiniz** aksiyonlar | Elektronik |
 
 1. **Şablonu içe aktarın:** Ayarlar → Otomasyonlar ve Sahneler → Şablonlar →
@@ -115,6 +116,53 @@ actions:
       title: StormGuard
       message: "Test olayı ulaştı: {{ trigger.json.headline }}"
 ```
+
+### Klimalar (climate_guard)
+
+Yıldırımda klimaları kapatıp fırtına geçince **eski ayarlarıyla** açar. Örn.
+1× Daikin Shira Plus (Daikin Onecta) + 2× Daikin Kaira Plus (Midea) — hepsi
+Home Assistant'ta `climate` varlığıdır.
+
+- **Kapatırken:** yalnızca o an **açık** olanlar (kapalı, `unavailable`,
+  `unknown` olanlara dokunmaz). Her biri için önce bir sahne anlık görüntüsü
+  alınır (`scene.create`, `scene.stormguard_<otomasyon>_<klima>`), sonra
+  `climate.set_hvac_mode: off`. `climate.turn_off` kullanılmaz: HA bu servisi
+  yalnızca `TURN_OFF` özelliği olan varlıklara izin verir
+  (`climate/services.py`, `async_register_entity_service(SERVICE_TURN_OFF, …,
+  [ClimateEntityFeature.TURN_OFF])`); özelliği olmayan bir klima açıkça
+  hedeflenirse çağrı hata verir. `set_hvac_mode` özellik istemez.
+- **Geri açarken:** yalnızca **hâlâ kapalı** olanlar — bu sırada birini siz
+  açtıysanız ona dokunmaz. Sahne varsa `scene.turn_on` (HA'nın
+  `climate/reproduce_state.py`'si sırasıyla mod, sıcaklık, ön ayar, salınım,
+  fan ve nemi geri yazar). Sahne yoksa kayıttaki mod → sıcaklık → fan.
+- **Neden `climate.turn_on` değil:** varlık kendi açma komutunu
+  uygulamıyorsa HA'nın varsayılanı sırasıyla `heat_cool`, `heat`, `cool`
+  modlarından ilk desteklenenini seçer (`climate/__init__.py`,
+  `ClimateEntity.async_turn_on`, "Fake turn on") — yazın ısıtma açılabilir.
+- **Hafıza (önerilir):** sahneler kalıcı değildir; HA yeniden başlarsa
+  silinir. Bir **Metin** yardımcısı oluşturun (Ayarlar → Cihazlar ve Hizmetler
+  → Yardımcılar → Metin, **en fazla uzunluk: 255**, desen boş) ve şablonda
+  *Hafıza* olarak seçin. Şablon oraya
+  `d=<son tarih>;climate.salon=cool/22.5/quiet;…` yazar, geri açınca siler.
+  Arayüzde oluşturulan Metin yardımcısının varsayılan sınırı **100**'dür;
+  sınıra sığmazsa önce fan, sonra sıcaklık düşülür, en son yalnızca sığan
+  klimalar yazılır — sınır asla aşılmaz (aşılsaydı HA değeri sessizce
+  reddederdi: `input_text.async_set_value`).
+  - Yeniden başlatmada süre dolmadıysa kalan süre beklenir; HA kapalıyken
+    dolduysa açılışta (24 saate kadar) geri açılır; daha eskiyse kayıt
+    silinir, hiçbir şey açılmaz.
+  - **Hafıza yoksa yeniden başlatmada hiçbir şey yapılmaz.** Hangi klimayı
+    şablonun kapattığını bilemez; sizin kapalı tuttuğunuz bir klimayı açmak
+    yanlış olur. Bu durumda HA oturum sırasında yeniden başlarsa klimalar
+    kapalı kalır — bu yüzden yardımcıyı oluşturun.
+- **Daikin Onecta** (HACS, bulut): Daikin bulut API'sinin günlük istek sınırı
+  vardır (yaklaşık **200 istek/gün**). Bir fırtına klima başına kapatmada 1,
+  açmada sahne ile 2–5 istek (mod, sıcaklık, fan, salınım…) harcar; sık
+  güncelleme (polling) aralığını kısa tuttuysanız sınıra yaklaşabilirsiniz.
+  Bulut erişilemezse komut başarısız olur — şablon diğer klimalarla devam eder.
+- **Midea** (Kaira Plus, yerel): klimaya **sabit IP** verin (modemde DHCP
+  rezervasyonu); IP değişirse varlık `unavailable` olur ve şablon onu atlar.
+- `scene` entegrasyonu gerekir (`default_config` içinde vardır).
 
 #### Şablonlar nasıl karar veriyor
 
@@ -211,6 +259,97 @@ actions:
               entity_id: switch.modem
 ```
 
+Örnek: entegrasyonla klimalar — yalnızca açık olanları kapat, risk bitince
+(ya da süre dolunca) **hâlâ kapalı** olanları eski ayarlarıyla aç. Sahneler HA
+yeniden başlarsa silindiği için mod ayrıca bir Metin yardımcısında
+(`input_text.stormguard_klima`, en fazla uzunluk 255) tutulur:
+
+```yaml
+# stormguard-example: integration-climate
+alias: "StormGuard — klimalar"
+mode: queued
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.stormguard_electronics_shield
+    from: "off"
+    to: "on"
+    id: risk
+  - trigger: state
+    entity_id: binary_sensor.stormguard_electronics_shield
+    from: "on"
+    to: "off"
+    id: safe
+variables:
+  acs:
+    - climate.salon
+    - climate.yatak_odasi
+    - climate.cocuk_odasi
+  memory: input_text.stormguard_klima
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: risk
+        sequence:
+          - variables:
+              running: >-
+                {{ acs | reject('is_state', ['off', 'unavailable', 'unknown']) | list }}
+          - repeat:
+              for_each: "{{ running }}"
+              sequence:
+                - action: scene.create
+                  data:
+                    scene_id: "stormguard_{{ repeat.item.split('.')[1] }}"
+                    snapshot_entities:
+                      - "{{ repeat.item }}"
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ memory }}"
+            data:
+              value: >-
+                {% for e in running %}{{ e }}={{ states(e) }}{{ ',' if not loop.last }}{% endfor %}
+          - repeat:
+              for_each: "{{ running }}"
+              sequence:
+                - action: climate.set_hvac_mode
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    hvac_mode: "off"
+                  continue_on_error: true
+      - conditions:
+          - condition: trigger
+            id: safe
+        sequence:
+          - repeat:
+              for_each: "{{ states(memory).split(',') | select('search', '=') | list }}"
+              sequence:
+                - variables:
+                    ac: "{{ repeat.item.split('=')[0] }}"
+                    mode: "{{ repeat.item.split('=')[1] }}"
+                    snap: "scene.stormguard_{{ repeat.item.split('=')[0].split('.')[1] }}"
+                - if:
+                    - "{{ ac in acs and is_state(ac, 'off') }}"
+                  then:
+                    - if:
+                        - "{{ state_attr(snap, 'entity_id') is not none }}"
+                      then:
+                        - action: scene.turn_on
+                          target:
+                            entity_id: "{{ snap }}"
+                      else:
+                        - action: climate.set_hvac_mode
+                          target:
+                            entity_id: "{{ ac }}"
+                          data:
+                            hvac_mode: "{{ mode }}"
+          - action: input_text.set_value
+            target:
+              entity_id: "{{ memory }}"
+            data:
+              value: ""
+```
+
 Test olayına bildirim:
 
 ```yaml
@@ -277,6 +416,7 @@ actions:
 | Cihaz fırtına bitmeden açıldı | Güvenlik süresi fırtınadan kısa. Uygulama `raised`'i tekrarlamaz; süreyi uzatın. |
 | Cihaz uzun süre kapalı kaldı | `cleared` kaçtı (telefon uyuyordu); güvenlik süresi dolunca açılır. Süreyi kısaltabilirsiniz. |
 | `local_only` ayarı etkisiz | Aynı kimliği paylaşan otomasyonlarda farklı değerler var; HA ilk yükleneni kullanır. |
+| Fırtına sırasında otomasyonu düzenledim, cihaz geri açılmadı | Otomasyonu kaydetmek/yeniden yüklemek çalışan oturumu **iptal eder**; güvenlik süresi de onunla gider (`ha_start` yalnızca HA yeniden başlarken çalışır). Fırtına sırasında StormGuard otomasyonlarını düzenlemeyin; düzenlediyseniz cihazı elle geri açın. Dört şablon için de geçerli. |
 
 ### Geliştirme
 
@@ -308,7 +448,9 @@ switched" — never "device stuck".
 
 - **A. Blueprints** (no install, Home Assistant ≥ 2025.4): `switch_guard`
   (turn switches off, turn back on only those it turned off), `cover_guard`
-  (close covers, optionally reopen), `shield_actions` (your own actions).
+  (close covers, optionally reopen), `climate_guard` (turn running air
+  conditioners off, restore their previous settings), `shield_actions` (your
+  own actions).
   Import via *Settings → Automations & Scenes → Blueprints → Import* with the
   file's GitHub URL.
 - **B. Integration** (HACS custom repository
@@ -351,6 +493,39 @@ remaining time; `switch_guard`/`cover_guard` also check device state and, if
 HA was down when the timeout passed, restore on boot (within 24 h).
 `shield_actions` cannot see devices and does not cover that last case.
 
+### Air conditioners (climate_guard)
+
+Turns the ACs that are **on** off during a lightning risk and back on with
+their **previous settings** (e.g. Daikin Onecta and Midea `climate` entities).
+
+- Off: only running ACs (never ones that are off/`unavailable`/`unknown`).
+  Each gets a `scene.create` snapshot first, then `climate.set_hvac_mode: off`
+  — not `climate.turn_off`, which HA only allows on entities with the
+  `TURN_OFF` feature (`climate/services.py`) and errors on others.
+- Restore: only ACs that are **still off** (one you turned on meanwhile is
+  left alone), via `scene.turn_on` (HA's `climate/reproduce_state.py`
+  replays mode, temperature, preset, swing, fan, humidity); without the scene,
+  the recorded mode → temperature → fan. Never a bare `climate.turn_on`: for
+  entities that do not implement it, HA picks the first of `heat_cool`,
+  `heat`, `cool` (`ClimateEntity.async_turn_on`, "Fake turn on") — heat in
+  summer.
+- **Memory (recommended):** scenes do not survive a restart. Create a *Text*
+  helper (max length **255**, no pattern — the UI default is 100) and pick it
+  as *Memory*. The blueprint stores `d=<deadline>;climate.x=mode/temp/fan;…`
+  and clears it after restoring; when it does not fit, fan then temperature
+  are dropped, then only the ACs that fit are kept — the limit is never
+  exceeded (HA silently rejects a too-long value). After a restart it resumes
+  the remaining time, restores on boot if the deadline passed while HA was
+  down (up to 24 h), and discards older records. **Without memory a restart
+  does nothing** — it cannot know which ACs it turned off.
+- **Daikin Onecta** is cloud based with a daily request limit (about 200
+  requests/day); one storm costs ~1 request per AC to turn off and 2–5 to
+  restore. **Midea** is local: give the AC a static IP (DHCP reservation).
+- Needs the `scene` integration (part of `default_config`).
+- The integration-path equivalent (automation on
+  `binary_sensor.stormguard_electronics_shield`) is the `integration-climate`
+  example in the Turkish section.
+
 ### Payload contract
 
 `POST /api/webhook/<id>`, `Content-Type: application/json`, a **flat**
@@ -376,6 +551,11 @@ The integration answers invalid payloads with HTTP 400 and changes nothing.
   host.
 - *Device restored before the storm ended:* the safety timeout is shorter
   than the storm; the app does not resend `raised`.
+- *Edited the automation during a storm and the device never came back:*
+  saving/reloading an automation **cancels** its running session, safety
+  timeout included (`ha_start` only fires when HA itself restarts). Don't edit
+  StormGuard automations during a storm; if you did, restore the device by
+  hand. Applies to all four blueprints.
 
 ### Development
 
