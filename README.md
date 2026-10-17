@@ -151,6 +151,17 @@ Home Assistant'ta `climate` varlığıdır.
   - Yeniden başlatmada süre dolmadıysa kalan süre beklenir; HA kapalıyken
     dolduysa açılışta (24 saate kadar) geri açılır; daha eskiyse kayıt
     silinir, hiçbir şey açılmaz.
+  - **En kolayı: hazır paket.** [`packages/stormguard.yaml`](packages/stormguard.yaml)
+    dosyasını HA'nın `config/packages/` klasörüne kopyalayın, `configuration.yaml`
+    içinde paketler kapalıysa bir kez açın:
+    ```yaml
+    homeassistant:
+      packages: !include_dir_named packages
+    ```
+    HA'yı yeniden başlatın; `input_text.stormguard_klima_hafiza` (en fazla
+    uzunluk 255) oluşur. Şablonda *Hafıza* olarak onu seçin. Pakette bilerek
+    `initial` yok: olsaydı HA her yeniden başlatmada değeri sıfırlar, hafıza tam
+    ihtiyaç anında boşalırdı.
   - **Hafıza yoksa yeniden başlatmada hiçbir şey yapılmaz.** Hangi klimayı
     şablonun kapattığını bilemez; sizin kapalı tuttuğunuz bir klimayı açmak
     yanlış olur. Bu durumda HA oturum sırasında yeniden başlarsa klimalar
@@ -518,6 +529,11 @@ their **previous settings** (e.g. Daikin Onecta and Midea `climate` entities).
   the remaining time, restores on boot if the deadline passed while HA was
   down (up to 24 h), and discards older records. **Without memory a restart
   does nothing** — it cannot know which ACs it turned off.
+  **Easiest:** copy [`packages/stormguard.yaml`](packages/stormguard.yaml) to
+  `config/packages/` (enable `homeassistant: packages: !include_dir_named
+  packages` once), restart, and pick `input_text.stormguard_klima_hafiza`
+  (max 255). It has no `initial` on purpose — that would wipe the memory on
+  every restart.
 - **Daikin Onecta** is cloud based with a daily request limit (about 200
   requests/day); one storm costs ~1 request per AC to turn off and 2–5 to
   restore. **Midea** is local: give the AC a static IP (DHCP reservation).

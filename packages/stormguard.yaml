@@ -1,0 +1,32 @@
+# StormGuard — Home Assistant paketi / package
+#
+# Klima şablonunun (climate_guard) hafızası. Bu dosyayı Home Assistant'ın
+# `config/packages/` klasörüne kopyalayın ve HA'yı yeniden başlatın; yardımcı
+# doğru ayarlarla oluşur. Sonra şablonda "Hafıza" olarak
+# `input_text.stormguard_klima_hafiza` seçin.
+#
+# `configuration.yaml` içinde paketler açık olmalı (bir kez):
+#
+#   homeassistant:
+#     packages: !include_dir_named packages
+#
+# Neden bu ayarlar:
+# - max: 255 → HA'nın üst sınırı. Arayüzde oluşturulan yardımcı varsayılan 100
+#   ile gelir; üç klimanın kaydı sığmayabilir (şablon o zaman fan/sıcaklık
+#   bilgisini düşer).
+# - `initial` YOK → bilerek. `initial` verilirse HA her yeniden başlatmada
+#   değeri sıfırlar ve hafıza tam ihtiyaç duyulduğu anda (fırtınada elektrik
+#   kesilip HA yeniden başlayınca) boşalır. `initial` olmadan HA son değeri
+#   geri yükler.
+# - pattern YOK → şablon kendi biçimini yazar.
+#
+# English: memory helper for the climate_guard blueprint. Copy to
+# config/packages/, restart HA, pick input_text.stormguard_klima_hafiza as
+# "Memory". No `initial` on purpose: it would wipe the memory on every restart.
+input_text:
+  stormguard_klima_hafiza:
+    name: "StormGuard klima hafızası"
+    icon: mdi:air-conditioner
+    min: 0
+    max: 255
+    mode: text
