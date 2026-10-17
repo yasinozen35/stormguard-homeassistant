@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "StormGuard",
+        "description": "StormGuard, hava riski olaylarını (\"risk başladı\" / \"risk bitti\") Home Assistant'a yayınlar. Cihazlarınıza ne olacağına otomasyonlarınız karar verir — uygulama hiçbir zaman komut göndermez.\n\nUygulama için gizli bir webhook kimliği üretilecek.",
+        "data": {
+          "allow_remote": "Ev ağı dışından gelen olayları kabul et"
+        },
+        "data_description": {
+          "allow_remote": "Telefonunuz evden uzaktayken de yayın yapsın istiyorsanız açın (Nabu Casa veya https dış adres). Kapalıyken yalnızca yerel ağdan gelen istekler kabul edilir; dışarıdan gelenler sessizce düşürülür."
+        }
+      },
+      "pair": {
+        "title": "StormGuard uygulamasını eşleştir",
+        "description": "Bu bağlantıyı StormGuard'ın yüklü olduğu telefonda açın: {link}\n\n```\n{raw_link}\n```\n\n**Ya da elle girin** — StormGuard → Uyarılar → Akıllı Ev:\n\n- Sunucu adresi: `{base_url}`\n- Uzaktan adres (https): `{remote_url}`\n- Webhook kimliği: `{webhook_id}`\n\nWebhook kimliği bir sırdır: bilen herkes Home Assistant'ınıza olay gönderebilir. Sonra uygulamada **Test olayı gönder**'e basın — *Son olay* sensörü güncellenir, hiçbir cihaz değişmez. Bitirmek için gönderin."
+      }
+    },
+    "error": {
+      "no_local_url": "Home Assistant'ın yerel ağ adresi yok. Ayarlar → Sistem → Ağ bölümünden ayarlayın, sonra bağlantıyı görmek için bu entegrasyonun seçeneklerini açın.",
+      "insecure_local_url": "Yerel adres, uygulamanın ev ağı saymadığı bir adreste şifresiz http kullanıyor; uygulama reddeder. Ayarlar → Sistem → Ağ bölümünde yerel bir IP/ad (örn. http://192.168.1.50:8123) ya da https kullanın.",
+      "no_remote_url": "https dış adres (veya Nabu Casa) bulunamadı; bağlantı yalnızca ev ağında çalışır. Ayarlar → Sistem → Ağ bölümünden dış adres ayarlayın."
+    },
+    "abort": {
+      "already_configured": "StormGuard zaten kurulu. Eşleştirme bağlantısını yeniden görmek için seçeneklerini açın."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "StormGuard seçenekleri",
+        "description": "Eşleştirme bağlantısı: {link}\n\n```\n{raw_link}\n```\n\nSunucu adresi: `{base_url}` · Uzaktan: `{remote_url}` · Webhook kimliği: `{webhook_id}`",
+        "data": {
+          "safety_timeout_minutes": "Güvenlik süresi (dakika)",
+          "allow_remote": "Ev ağı dışından gelen olayları kabul et"
+        },
+        "data_description": {
+          "safety_timeout_minutes": "\"Risk bitti\" hiç gelmezse (telefon uyuyordu), yeni bir \"risk başladı\" gelmeden bu kadar dakika geçince kalkan kendiliğinden kapanır. 10–720.",
+          "allow_remote": "Kapalıyken yerel ağ dışından gelen istekler sessizce düşürülür."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "electronics": {
+        "name": "Elektronik kalkanı"
+      },
+      "car": {
+        "name": "Araç kalkanı"
+      },
+      "plants": {
+        "name": "Bitki kalkanı"
+      },
+      "clothes": {
+        "name": "Çamaşır kalkanı"
+      }
+    },
+    "sensor": {
+      "last_event": {
+        "name": "Son olay"
+      }
+    }
+  },
+  "exceptions": {
+    "webhook_in_use": {
+      "message": "StormGuard webhook kimliği başka bir işleyici tarafından kullanılıyor (örn. aynı kimlikle StormGuard şablonu kullanan bir otomasyon). Bir webhook kimliği için ya şablonu ya entegrasyonu kullanın."
+    }
+  }
+}

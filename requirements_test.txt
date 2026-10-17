@@ -1,0 +1,6 @@
+# Home Assistant test harness. 0.13.373 pins homeassistant==2026.10.2
+# (Python >= 3.14.2). Bump together; scripts/test.sh runs hassfest from the
+# matching Home Assistant tag.
+pytest-homeassistant-custom-component==0.13.373
+pytest-timeout
+ruff

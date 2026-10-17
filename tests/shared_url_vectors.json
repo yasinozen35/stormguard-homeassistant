@@ -1,0 +1,39 @@
+{
+  "_comment": "Uygulama (src/domain/integrations/homeAssistantConfig.ts) ve entegrasyon (custom_components/stormguard/pairing.py) AYNI adres kuralını uygular. Bu liste iki tarafın testlerinde de okunur; kural yalnızca birinde değişirse testler kırılır. / Both the app and the integration read this list in their tests.",
+  "accepted": [
+    "http://192.168.1.50:8123",
+    "http://10.0.0.5:8123",
+    "http://172.16.0.2",
+    "http://172.31.255.254",
+    "http://127.0.0.1:8123",
+    "http://169.254.10.20",
+    "http://100.101.102.103:8123",
+    "http://homeassistant.local:8123",
+    "http://ha.lan",
+    "http://ev.home.arpa",
+    "http://ha.tailnet-abc.ts.net:8123",
+    "http://homeassistant:8123",
+    "http://[fe80::1]:8123",
+    "http://[fd12:3456::7]:8123",
+    "http://[::1]:8123",
+    "https://ha.example.com",
+    "https://ha.example.com:8443",
+    "https://x.ui.nabu.casa"
+  ],
+  "rejected": [
+    "http://ha.example.com",
+    "http://ha.example.com:8123",
+    "http://8.8.8.8:8123",
+    "http://172.32.0.1",
+    "http://192.169.1.1",
+    "http://100.128.0.1",
+    "http://[2001:db8::1]:8123",
+    "http://evil.local.example.com",
+    "http://192.168.1.999",
+    "https://homeassistant.local@evil.example",
+    "http://user:pass@192.168.1.50:8123",
+    "http://ha:8123#frag",
+    "http://ha:8123/?x=1",
+    "ftp://ha.local"
+  ]
+}

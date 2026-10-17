@@ -1,0 +1,275 @@
+blueprint:
+  name: "StormGuard — Kalkan aksiyonları (Shield actions)"
+  author: StormGuard
+  description: >-
+    StormGuard uygulamasının yayınladığı olaylara göre **sizin seçtiğiniz**
+    aksiyonları çalıştırır. Uygulama yalnızca "risk başladı" (`raised`) ve
+    "risk bitti" (`cleared`) olaylarını yayınlar; cihazınıza ne olacağına bu
+    otomasyon karar verir.
+
+
+    - Risk başlayınca **Risk başladığında** aksiyonları çalışır.
+
+    - Aynı kalkanın bütün riskleri bitince **ya da** güvenlik süresi dolunca
+    (hangisi önce olursa) **Risk bittiğinde** aksiyonları çalışır. Kaçırılan bir
+    `cleared` olayı cihazı yanlış durumda bırakmaz.
+
+    - `test` olayları, başka kalkanlar ve en düşük şiddetin altındaki uyarılar
+    hiçbir aksiyon çalıştırmaz.
+
+    - Aynı webhook kimliğini birden çok StormGuard şablonu paylaşabilir
+    (uygulamada tek kimlik yeterli).
+
+    - Home Assistant oturum sırasında yeniden başlarsa kalan süre beklenir ve
+    **Risk bittiğinde** aksiyonları çalışır. HA, güvenlik süresi dolarken
+    kapalıysa (uzun elektrik kesintisi) bu genel şablon bunu bilemez; cihaz
+    durumuna bakan *Prizi kapat* / *Kapıyı kapat* şablonları ya da StormGuard
+    entegrasyonu bu durumu da kapsar.
+
+
+    *English:* runs **your** actions on StormGuard `raised` events and restores
+    on `cleared` or after a safety timeout, whichever comes first. `test`
+    events, other shields and lower severities never run actions. Several
+    StormGuard blueprints can share the same webhook ID.
+  domain: automation
+  source_url: https://github.com/yasinozen35/stormguard-homeassistant/blob/main/blueprints/automation/stormguard/shield_actions.yaml
+  homeassistant:
+    min_version: "2025.4.0"
+  input:
+    connection:
+      name: "Bağlantı (Connection)"
+      icon: mdi:webhook
+      input:
+        webhook_id:
+          name: "Webhook kimliği (Webhook ID)"
+          description: >-
+            StormGuard uygulamasına yazdığınız kimliğin aynısı. Yalnızca harf,
+            rakam, `_` ve `-` (en fazla 64 karakter). Diğer StormGuard
+            şablonlarıyla aynı kimliği kullanabilirsiniz. Sır niteliğindedir.
+            *English:* the same ID you entered in the app; may be shared with
+            other StormGuard blueprints.
+          selector:
+            text: {}
+        local_only:
+          name: "Yalnızca ev ağından kabul et (Local network only)"
+          description: >-
+            Açıkken olaylar yalnızca ev ağından (veya Tailscale gibi yerel
+            adreslerden) kabul edilir. Telefonunuz evin dışından (Nabu Casa,
+            dış adres) yayın yapacaksa kapatın. Aynı kimliği kullanan bütün
+            şablonlarda **aynı** değeri seçin: Home Assistant ilk yüklenen
+            otomasyonun değerini kullanır.
+            *English:* turn off to accept events from outside your home
+            network; use the same value in every blueprint sharing the ID.
+          default: true
+          selector:
+            boolean: {}
+    shield:
+      name: "Kalkan (Shield)"
+      icon: mdi:shield-half-full
+      input:
+        profile:
+          name: "Kalkan (Shield)"
+          description: "Hangi StormGuard kalkanına tepki verilsin? *Which shield to react to.*"
+          default: electronics
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - label: "Ev elektroniği / Modem (electronics) — yıldırım"
+                  value: electronics
+                - label: "Araç (car) — dolu"
+                  value: car
+                - label: "Bitkiler (plants) — don"
+                  value: plants
+                - label: "Çamaşır (clothes) — yağmur"
+                  value: clothes
+        min_severity:
+          name: "En düşük şiddet (Minimum severity)"
+          description: >-
+            `Uyarı` seçilirse uyarı ve kritik olaylar, `Kritik` seçilirse
+            yalnızca kritik olaylar tetikler. *Warning = warning + critical;
+            Critical = critical only.*
+          default: warning
+          selector:
+            select:
+              options:
+                - label: "Uyarı ve üstü (warning)"
+                  value: warning
+                - label: "Yalnızca kritik (critical)"
+                  value: critical
+        alert_types:
+          name: "Uyarı tipleri (Alert types)"
+          description: >-
+            Boş bırakılırsa kalkanın bütün uyarı tipleri tetikler. *Leave empty
+            for all types.*
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: "Yağmur (rain)"
+                  value: rain
+                - label: "Gök gürültülü fırtına / yıldırım (thunderstorm)"
+                  value: thunderstorm
+                - label: "Rüzgâr (wind)"
+                  value: wind
+                - label: "Dolu (hail)"
+                  value: hail
+                - label: "Don (frost)"
+                  value: frost
+        safety_minutes:
+          name: "Güvenlik süresi (Safety timeout)"
+          description: >-
+            Bu kadar dakika içinde `cleared` gelmezse **Risk bittiğinde**
+            aksiyonları yine çalışır (yeni bir `raised` süreyi uzatır).
+            Telefon uyurken `cleared` kaçabilir; bu süre cihazın takılı
+            kalmasını önler. **0 = kapalı: önerilmez** — kaçırılan tek bir
+            `cleared` cihazı süresiz olarak riskli durumda bırakır ve Home
+            Assistant yeniden başlarsa oturum kaybolur.
+            *English: restore after this many minutes without `cleared`.
+            0 disables it (not recommended: a missed `cleared` leaves the
+            device switched indefinitely).*
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 1440
+              step: 5
+              unit_of_measurement: min
+              mode: box
+    actions_section:
+      name: "Aksiyonlar (Actions)"
+      icon: mdi:play-circle-outline
+      input:
+        raised_actions:
+          name: "Risk başladığında (When the risk starts)"
+          description: >-
+            Örn. modem prizini kapat, tenteyi topla. *E.g. turn off the modem
+            plug, retract the awning.*
+          default: []
+          selector:
+            action: {}
+        cleared_actions:
+          name: "Risk bittiğinde (When the risk ends / safety timeout)"
+          description: >-
+            Cihazı normale döndüren aksiyonlar. Hem `cleared` hem güvenlik
+            süresi dolunca çalışır; bu yüzden **tekrar çalışması zararsız**
+            olmalı (örn. "aç", "değiştir" değil). *Must be safe to run more
+            than once.*
+          default: []
+          selector:
+            action: {}
+
+# Bir "oturum": ilk `raised` aksiyonları çalıştırır, sonra aynı kalkanın
+# bütün anahtarları (`tip|şiddet`) bitene ya da güvenlik süresi dolana kadar
+# webhook'u dinler. `single` kipinde oturum sürerken gelen olaylar ana
+# tetikleyiciden değil, oturumun içindeki `wait_for_trigger`'dan işlenir;
+# böylece "warning → critical" geçişinde (raised critical + cleared warning)
+# cihaz erken geri alınmaz.
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: webhook
+    id: stormguard
+    webhook_id: !input webhook_id
+    allowed_methods:
+      - POST
+    local_only: !input local_only
+  - trigger: homeassistant
+    id: ha_start
+    event: start
+
+variables:
+  sg_profile: !input profile
+  sg_min_severity: !input min_severity
+  sg_types: !input alert_types
+  sg_safety_minutes: !input safety_minutes
+  sg_rank:
+    warning: 1
+    critical: 2
+  # Olay bu otomasyonu ilgilendiriyor mu? `trigger.json` düz bir nesnedir
+  # (`trigger.json.state`); JSON olmayan gövdede tanımsızdır.
+  sg_match: >-
+    {% set j = trigger.json if trigger.id == 'stormguard' and trigger.json is defined and trigger.json is mapping else {} %}
+    {{ j.get('source') == 'stormguard'
+       and j.get('profile') == sg_profile
+       and j.get('state') in ['raised', 'cleared']
+       and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+       and (sg_types | length == 0 or j.get('type') in sg_types) }}
+  sg_state: "{{ trigger.json.get('state') if sg_match else none }}"
+  sg_key: "{{ trigger.json.get('type') ~ '|' ~ trigger.json.get('severity') if sg_match else '' }}"
+  # Home Assistant yeniden başladıysa: son oturum güvenlik süresi içinde mi?
+  # `this` tetiklenmeden önceki durumdur; `last_triggered` son oturumun
+  # başladığı an.
+  sg_prev_ts: >-
+    {% set lt = this.attributes.last_triggered if this is mapping and this.attributes is defined else none %}
+    {{ as_timestamp(lt, 0) if lt else 0 }}
+  sg_start_mode: >-
+    {% if trigger.id != 'ha_start' or sg_safety_minutes | int(0) == 0 or sg_prev_ts | float(0) == 0 %}none
+    {%- elif as_timestamp(now()) - sg_prev_ts | float < sg_safety_minutes | int * 60 %}resume
+    {%- else %}none{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (trigger.id == 'stormguard' and sg_match and sg_state == 'raised')
+         or (trigger.id == 'ha_start' and sg_start_mode == 'resume') }}
+
+actions:
+  - variables:
+      # Aktif anahtarlar. Yeniden başlatmadan sonra hangi anahtarın açık
+      # olduğunu bilemeyiz: `*` bu kalkanın herhangi bir `cleared`'ı ile kapanır.
+      sg_active: "{{ [sg_key] if trigger.id == 'stormguard' else ['*'] }}"
+      sg_deadline: >-
+        {{ as_timestamp(now()) + sg_safety_minutes | int * 60
+           if trigger.id == 'stormguard'
+           else sg_prev_ts | float + sg_safety_minutes | int * 60 }}
+  - if:
+      - "{{ trigger.id == 'stormguard' }}"
+    then:
+      - alias: "Risk başladı — kullanıcının aksiyonları"
+        sequence: !input raised_actions
+        # Bir aksiyon hata verse bile oturum sürer ve geri alma çalışır.
+        continue_on_error: true
+  - alias: "Bitene ya da güvenlik süresi dolana kadar dinle"
+    repeat:
+      while:
+        - >-
+          {{ sg_active | length > 0
+             and (sg_safety_minutes | int == 0 or as_timestamp(now()) < sg_deadline | float) }}
+      sequence:
+        - wait_for_trigger:
+            - trigger: webhook
+              webhook_id: !input webhook_id
+              allowed_methods:
+                - POST
+              local_only: !input local_only
+          timeout: >-
+            {{ [sg_deadline | float - as_timestamp(now()), 0] | max | round(0, 'ceil') | int
+               if sg_safety_minutes | int > 0 else 31536000 }}
+          continue_on_timeout: true
+        - variables:
+            sg_w_state: >-
+              {% set j = wait.trigger.json if wait.trigger and wait.trigger.json is defined and wait.trigger.json is mapping else {} %}
+              {% if not wait.trigger %}timeout
+              {%- elif j.get('source') == 'stormguard'
+                   and j.get('profile') == sg_profile
+                   and j.get('state') in ['raised', 'cleared']
+                   and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+                   and (sg_types | length == 0 or j.get('type') in sg_types) %}{{ j.get('state') }}
+              {%- else %}ignore{% endif %}
+            sg_w_key: >-
+              {{ wait.trigger.json.get('type') ~ '|' ~ wait.trigger.json.get('severity')
+                 if sg_w_state in ['raised', 'cleared'] else '' }}
+            sg_active: >-
+              {% if sg_w_state == 'timeout' %}{{ [] }}
+              {%- elif sg_w_state == 'raised' %}{{ (sg_active + [sg_w_key]) | unique | list }}
+              {%- elif sg_w_state == 'cleared' %}{{ sg_active | reject('in', [sg_w_key, '*']) | list }}
+              {%- else %}{{ sg_active }}{% endif %}
+            sg_deadline: >-
+              {{ as_timestamp(now()) + sg_safety_minutes | int * 60
+                 if sg_w_state == 'raised' else sg_deadline }}
+  - alias: "Risk bitti ya da güvenlik süresi doldu — geri al"
+    sequence: !input cleared_actions
+    continue_on_error: true

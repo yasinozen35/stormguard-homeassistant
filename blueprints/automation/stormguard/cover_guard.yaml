@@ -1,0 +1,253 @@
+blueprint:
+  name: "StormGuard — Kapıyı/tenteyi kapat (Cover guard)"
+  author: StormGuard
+  description: >-
+    StormGuard risk yayınlayınca seçtiğiniz garaj kapısını / tenteyi / panjuru
+    **kapatır** (örn. dolu riskinde garaj). Risk bitince **ya da** güvenlik
+    süresi dolunca (hangisi önce olursa), "Sonra yeniden aç" açıksa **yalnızca
+    o an açık olup kendi kapattıklarını** yeniden açar.
+
+
+    Home Assistant yeniden başlarsa: güvenlik süresi dolmadıysa kalan süre
+    beklenir; HA kapalıyken süre dolduysa açılışta 24 saate kadar geri açılır.
+    `test` olayları ve başka kalkanlar hiçbir şeyi değiştirmez. Aynı webhook
+    kimliğini diğer StormGuard şablonlarıyla paylaşabilir.
+
+
+    *English:* **closes** the selected covers on a StormGuard `raised` event
+    and, if "reopen afterwards" is on, reopens the ones it closed on `cleared`
+    or after a safety timeout, whichever comes first.
+  domain: automation
+  source_url: https://github.com/yasinozen35/stormguard-homeassistant/blob/main/blueprints/automation/stormguard/cover_guard.yaml
+  homeassistant:
+    min_version: "2025.4.0"
+  input:
+    connection:
+      name: "Bağlantı (Connection)"
+      icon: mdi:webhook
+      input:
+        webhook_id:
+          name: "Webhook kimliği (Webhook ID)"
+          description: >-
+            StormGuard uygulamasına yazdığınız kimliğin aynısı. Diğer
+            StormGuard şablonlarıyla aynı kimliği kullanabilirsiniz. Sır
+            niteliğindedir. *The same ID you entered in the app.*
+          selector:
+            text: {}
+        local_only:
+          name: "Yalnızca ev ağından kabul et (Local network only)"
+          description: >-
+            Telefon evin dışından yayın yapacaksa kapatın. Aynı kimliği
+            kullanan bütün şablonlarda aynı değeri seçin. *Turn off to accept
+            events from outside your home network.*
+          default: true
+          selector:
+            boolean: {}
+    shield:
+      name: "Kalkan (Shield)"
+      icon: mdi:shield-half-full
+      input:
+        profile:
+          name: "Kalkan (Shield)"
+          description: "Hangi StormGuard kalkanına tepki verilsin? *Which shield to react to.*"
+          default: car
+          selector:
+            select:
+              mode: dropdown
+              options:
+                - label: "Ev elektroniği / Modem (electronics) — yıldırım"
+                  value: electronics
+                - label: "Araç (car) — dolu"
+                  value: car
+                - label: "Bitkiler (plants) — don"
+                  value: plants
+                - label: "Çamaşır (clothes) — yağmur"
+                  value: clothes
+        min_severity:
+          name: "En düşük şiddet (Minimum severity)"
+          description: "*Warning = warning + critical; Critical = critical only.*"
+          default: warning
+          selector:
+            select:
+              options:
+                - label: "Uyarı ve üstü (warning)"
+                  value: warning
+                - label: "Yalnızca kritik (critical)"
+                  value: critical
+        alert_types:
+          name: "Uyarı tipleri (Alert types)"
+          description: "Boş = bütün tipler. *Empty = all types.*"
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - label: "Yağmur (rain)"
+                  value: rain
+                - label: "Gök gürültülü fırtına / yıldırım (thunderstorm)"
+                  value: thunderstorm
+                - label: "Rüzgâr (wind)"
+                  value: wind
+                - label: "Dolu (hail)"
+                  value: hail
+                - label: "Don (frost)"
+                  value: frost
+    device:
+      name: "Cihaz (Device)"
+      icon: mdi:garage
+      input:
+        covers:
+          name: "Kapatılacaklar (Covers to close)"
+          description: "Garaj kapısı, tente, panjur. *Garage door, awning, shutters.*"
+          selector:
+            entity:
+              multiple: true
+              filter:
+                - domain: cover
+        reopen:
+          name: "Sonra yeniden aç (Reopen afterwards)"
+          description: >-
+            Risk bitince ya da güvenlik süresi dolunca yeniden açılsın mı?
+            Kapalıysa yalnızca kapatılır. *Reopen when the risk ends or the
+            safety timeout expires.*
+          default: true
+          selector:
+            boolean: {}
+        safety_minutes:
+          name: "Güvenlik süresi (Safety timeout)"
+          description: >-
+            Bu kadar dakika içinde `cleared` gelmezse yine yeniden açılır
+            (yeni bir `raised` süreyi uzatır). **0 = kapalı: önerilmez** —
+            kaçırılan tek bir `cleared` kapıyı süresiz kapalı bırakır.
+            *0 disables the timeout (not recommended).*
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 1440
+              step: 5
+              unit_of_measurement: min
+              mode: box
+
+mode: single
+max_exceeded: silent
+
+triggers:
+  - trigger: webhook
+    id: stormguard
+    webhook_id: !input webhook_id
+    allowed_methods:
+      - POST
+    local_only: !input local_only
+  - trigger: homeassistant
+    id: ha_start
+    event: start
+
+variables:
+  sg_profile: !input profile
+  sg_min_severity: !input min_severity
+  sg_types: !input alert_types
+  sg_safety_minutes: !input safety_minutes
+  sg_entities: !input covers
+  sg_reopen: !input reopen
+  sg_rank:
+    warning: 1
+    critical: 2
+  sg_match: >-
+    {% set j = trigger.json if trigger.id == 'stormguard' and trigger.json is defined and trigger.json is mapping else {} %}
+    {{ j.get('source') == 'stormguard'
+       and j.get('profile') == sg_profile
+       and j.get('state') in ['raised', 'cleared']
+       and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+       and (sg_types | length == 0 or j.get('type') in sg_types) }}
+  sg_state: "{{ trigger.json.get('state') if sg_match else none }}"
+  sg_key: "{{ trigger.json.get('type') ~ '|' ~ trigger.json.get('severity') if sg_match else '' }}"
+  sg_prev_ts: >-
+    {% set lt = this.attributes.last_triggered if this is mapping and this.attributes is defined else none %}
+    {{ as_timestamp(lt, 0) if lt else 0 }}
+  # Korumada görünen (kapalı) örtüler — yalnızca açılışta ve yeniden açma
+  # açıkken anlamlı.
+  sg_protected: >-
+    {{ ([sg_entities] | flatten | select('is_state', 'closed') | list) if sg_reopen else [] }}
+  sg_start_mode: >-
+    {% set elapsed = as_timestamp(now()) - sg_prev_ts | float(0) %}
+    {% if trigger.id != 'ha_start' or sg_safety_minutes | int(0) == 0
+          or sg_prev_ts | float(0) == 0 or sg_protected | length == 0 %}none
+    {%- elif elapsed < sg_safety_minutes | int * 60 %}resume
+    {%- elif elapsed < sg_safety_minutes | int * 60 + 86400 %}restore
+    {%- else %}none{% endif %}
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ (trigger.id == 'stormguard' and sg_match and sg_state == 'raised')
+         or (trigger.id == 'ha_start' and sg_start_mode in ['resume', 'restore']) }}
+
+actions:
+  - variables:
+      # Geri açılacaklar: yalnızca bizim kapattıklarımız (o an açık olanlar).
+      sg_targets: >-
+        {{ ([sg_entities] | flatten | select('is_state', ['open', 'opening', 'closing']) | list)
+           if trigger.id == 'stormguard' and sg_reopen
+           else (sg_protected if trigger.id == 'ha_start' else []) }}
+      sg_active: >-
+        {{ [sg_key] if trigger.id == 'stormguard'
+           else (['*'] if sg_start_mode == 'resume' else []) }}
+      sg_deadline: >-
+        {{ as_timestamp(now()) + sg_safety_minutes | int * 60
+           if trigger.id == 'stormguard'
+           else sg_prev_ts | float + sg_safety_minutes | int * 60 }}
+  - if:
+      - "{{ trigger.id == 'stormguard' }}"
+    then:
+      - alias: "Risk başladı — kapat"
+        action: cover.close_cover
+        target:
+          entity_id: "{{ [sg_entities] | flatten }}"
+        continue_on_error: true
+  - alias: "Bitene ya da güvenlik süresi dolana kadar dinle"
+    repeat:
+      while:
+        - >-
+          {{ sg_active | length > 0
+             and (sg_safety_minutes | int == 0 or as_timestamp(now()) < sg_deadline | float) }}
+      sequence:
+        - wait_for_trigger:
+            - trigger: webhook
+              webhook_id: !input webhook_id
+              allowed_methods:
+                - POST
+              local_only: !input local_only
+          timeout: >-
+            {{ [sg_deadline | float - as_timestamp(now()), 0] | max | round(0, 'ceil') | int
+               if sg_safety_minutes | int > 0 else 31536000 }}
+          continue_on_timeout: true
+        - variables:
+            sg_w_state: >-
+              {% set j = wait.trigger.json if wait.trigger and wait.trigger.json is defined and wait.trigger.json is mapping else {} %}
+              {% if not wait.trigger %}timeout
+              {%- elif j.get('source') == 'stormguard'
+                   and j.get('profile') == sg_profile
+                   and j.get('state') in ['raised', 'cleared']
+                   and sg_rank.get(j.get('severity') | string, 0) >= sg_rank[sg_min_severity]
+                   and (sg_types | length == 0 or j.get('type') in sg_types) %}{{ j.get('state') }}
+              {%- else %}ignore{% endif %}
+            sg_w_key: >-
+              {{ wait.trigger.json.get('type') ~ '|' ~ wait.trigger.json.get('severity')
+                 if sg_w_state in ['raised', 'cleared'] else '' }}
+            sg_active: >-
+              {% if sg_w_state == 'timeout' %}{{ [] }}
+              {%- elif sg_w_state == 'raised' %}{{ (sg_active + [sg_w_key]) | unique | list }}
+              {%- elif sg_w_state == 'cleared' %}{{ sg_active | reject('in', [sg_w_key, '*']) | list }}
+              {%- else %}{{ sg_active }}{% endif %}
+            sg_deadline: >-
+              {{ as_timestamp(now()) + sg_safety_minutes | int * 60
+                 if sg_w_state == 'raised' else sg_deadline }}
+  - if:
+      - "{{ sg_targets | length > 0 }}"
+    then:
+      - alias: "Risk bitti ya da güvenlik süresi doldu — yeniden aç"
+        action: cover.open_cover
+        target:
+          entity_id: "{{ sg_targets }}"
+        continue_on_error: true

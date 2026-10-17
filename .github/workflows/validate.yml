@@ -1,0 +1,38 @@
+# Her gönderimde ve haftada bir: HACS doğrulaması, hassfest ve testler.
+# Every push and weekly: HACS validation, hassfest and the test suite.
+name: Validate
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: home-assistant/actions/hassfest@master
+
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Test (ruff + pytest)
+        run: ./scripts/test.sh
+        env:
+          HASSFEST: "0"  # ayrı iş olarak çalışıyor / runs as its own job

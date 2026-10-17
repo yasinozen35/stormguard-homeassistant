@@ -1,0 +1,70 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "StormGuard",
+        "description": "StormGuard publishes weather risk events (\"risk started\" / \"risk ended\") to Home Assistant. Your automations decide what your devices do — the app never sends commands.\n\nA secret webhook ID will be generated for the app.",
+        "data": {
+          "allow_remote": "Accept events from outside the home network"
+        },
+        "data_description": {
+          "allow_remote": "Turn on if your phone should also publish when it is away from home (Nabu Casa or an https external URL). Off: only requests from your local network are accepted; remote requests are silently dropped."
+        }
+      },
+      "pair": {
+        "title": "Pair the StormGuard app",
+        "description": "Open this link on the phone that runs StormGuard: {link}\n\n```\n{raw_link}\n```\n\n**Or enter manually** in StormGuard → Alerts → Smart home:\n\n- Server address: `{base_url}`\n- Remote address (https): `{remote_url}`\n- Webhook ID: `{webhook_id}`\n\nThe webhook ID is a secret: anyone who knows it can send events to your Home Assistant. Then press **Send test event** in the app — the *Last event* sensor updates and no device changes. Submit to finish."
+      }
+    },
+    "error": {
+      "no_local_url": "Home Assistant has no local network URL. Set one under Settings → System → Network, then open this integration's options to get the link.",
+      "insecure_local_url": "The local URL uses plain http on an address the app does not treat as a home network, so the app will refuse it. Use a local IP/hostname (e.g. http://192.168.1.50:8123) or https under Settings → System → Network.",
+      "no_remote_url": "No https external URL (or Nabu Casa) was found, so the link only works on your home network. Set an external URL under Settings → System → Network."
+    },
+    "abort": {
+      "already_configured": "StormGuard is already set up. Open its options to see the pairing link again."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "StormGuard options",
+        "description": "Pairing link: {link}\n\n```\n{raw_link}\n```\n\nServer address: `{base_url}` · Remote: `{remote_url}` · Webhook ID: `{webhook_id}`",
+        "data": {
+          "safety_timeout_minutes": "Safety timeout (minutes)",
+          "allow_remote": "Accept events from outside the home network"
+        },
+        "data_description": {
+          "safety_timeout_minutes": "If \"risk ended\" never arrives (the phone was asleep), a shield turns off by itself after this many minutes without a new \"risk started\". 10–720.",
+          "allow_remote": "Off: requests from outside the local network are silently dropped."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "electronics": {
+        "name": "Electronics shield"
+      },
+      "car": {
+        "name": "Car shield"
+      },
+      "plants": {
+        "name": "Plants shield"
+      },
+      "clothes": {
+        "name": "Laundry shield"
+      }
+    },
+    "sensor": {
+      "last_event": {
+        "name": "Last event"
+      }
+    }
+  },
+  "exceptions": {
+    "webhook_in_use": {
+      "message": "The StormGuard webhook ID is already used by another handler (for example an automation using a StormGuard blueprint with the same ID). Use either the blueprint or the integration for one webhook ID."
+    }
+  }
+}
